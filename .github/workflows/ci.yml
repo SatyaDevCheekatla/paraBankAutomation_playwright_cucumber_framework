@@ -1,0 +1,89 @@
+name: ParaBank UI CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Playwright Cucumber Allure
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      CI: true
+      HEADLESS: true
+      BROWSER: chromium
+      BASE_URL: https://parabank.parasoft.com/parabank/
+      PARABANK_USERNAME: john
+      PARABANK_PASSWORD: demo
+      TIMEOUT: 30000
+      SLOW_MO: 0
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Setup Java for Allure
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run Cucumber suite
+        run: npm test
+
+      - name: Generate Allure report
+        if: always()
+        run: npm run report:generate
+
+      - name: Upload Allure raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Allure HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Playwright traces and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: execution-artifacts
+          path: |
+            reports/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
