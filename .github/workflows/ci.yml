@@ -48,7 +48,7 @@ jobs:
         run: npm run typecheck
 
       - name: Run Cucumber suite
-        run: npm test || true   # ✅ ensures pipeline continues even if tests fail
+        run: npm test || true   # ensures pipeline continues even if tests fail
 
       - name: Generate Allure report
         if: always()
@@ -83,7 +83,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Send Allure Report via Email
+      - name: Send Email with Report Link
         if: always()
         uses: dawidd6/action-send-mail@v3
         with:
@@ -105,11 +105,42 @@ jobs:
 
             Status: ${{ job.status }}
 
-            🔗 View Workflow Run:
+            🌐 View Allure Report:
+            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+            🔗 Workflow Run:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            📊 Download Allure Report:
-            Go to the above link → Scroll to "Artifacts" → Download "allure-report"
+            📦 If needed, download report from Artifacts section.
 
             Regards,
             GitHub Actions
+
+  deploy:
+    name: Deploy Allure Report to GitHub Pages
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download Allure Report Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: allure-report
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
