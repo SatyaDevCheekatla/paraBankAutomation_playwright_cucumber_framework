@@ -54,15 +54,6 @@ jobs:
         if: always()
         run: npm run report:generate
 
-      - name: Upload Allure raw results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results
-          path: allure-results/
-          if-no-files-found: warn
-          retention-days: 14
-
       - name: Upload Allure HTML report
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,18 +61,6 @@ jobs:
           name: allure-report
           path: allure-report/
           if-no-files-found: warn
-          retention-days: 14
-
-      - name: Upload Playwright traces and reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: execution-artifacts
-          path: |
-            reports/
-            test-results/
-          if-no-files-found: warn
-          retention-days: 14
 
       - name: Send Email with Report Link
         if: always()
@@ -99,10 +78,6 @@ jobs:
             Test Execution Report
             ====================
 
-            Repository: ${{ github.repository }}
-            Branch: ${{ github.ref_name }}
-            Commit: ${{ github.sha }}
-
             Status: ${{ job.status }}
 
             🌐 View Allure Report:
@@ -110,8 +85,6 @@ jobs:
 
             🔗 Workflow Run:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-            📦 If needed, download report from Artifacts section.
 
             Regards,
             GitHub Actions
@@ -134,13 +107,19 @@ jobs:
           name: allure-report
           path: allure-report
 
+      # ✅ FIX: move contents to root (critical for Pages)
+      - name: Prepare Pages Content
+        run: |
+          cp -r allure-report/* .
+          touch .nojekyll
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report
+          path: .
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
