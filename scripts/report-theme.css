@@ -1,0 +1,223 @@
+body {
+  color: #526054;
+  background:
+    radial-gradient(circle at top left, rgba(29, 121, 128, 0.10), transparent 26%),
+    radial-gradient(circle at top right, rgba(209, 156, 65, 0.10), transparent 22%),
+    linear-gradient(180deg, #f5f1e8 0%, #fbfaf6 100%);
+  font-family: "Segoe UI", "Trebuchet MS", Arial, sans-serif;
+}
+
+nav.navbar {
+  background: linear-gradient(135deg, #123f43 0%, #20656a 58%, #d89a3d 100%);
+  border-bottom: 0;
+  box-shadow: 0 18px 40px rgba(18, 63, 67, 0.24);
+}
+
+nav .navbar-text {
+  color: #f7f4ec;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.main_container {
+  padding: 24px 28px 12px;
+}
+
+.x_panel {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(207, 201, 186, 0.88);
+  border-radius: 24px;
+  box-shadow: 0 20px 45px rgba(32, 44, 35, 0.08);
+}
+
+.fixed_height_320 {
+  height: 360px;
+}
+
+.x_title {
+  border-bottom: 1px solid rgba(210, 203, 188, 0.85);
+  padding: 4px 4px 14px;
+  margin-bottom: 14px;
+}
+
+.x_title h2 {
+  color: #193133;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.x_title span,
+.dataTables_info,
+.dataTables_length,
+.dataTables_filter,
+table.tile_info td,
+.created-by p {
+  color: #617161;
+}
+
+.table > thead > tr > th {
+  background: #eef3ef;
+  color: #204346;
+  border-bottom: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+  background: rgba(238, 243, 239, 0.55);
+}
+
+.table-bordered,
+.table-bordered > thead > tr > th,
+.table-bordered > tbody > tr > td {
+  border-color: rgba(214, 208, 195, 0.92);
+}
+
+.table > tbody > tr > td {
+  vertical-align: middle;
+}
+
+.table a {
+  color: #155f65;
+  font-weight: 600;
+}
+
+.table a:hover {
+  color: #d0881e;
+  text-decoration: none;
+}
+
+.form-control {
+  border-radius: 14px;
+  border: 1px solid rgba(203, 197, 183, 0.95);
+  box-shadow: none;
+  min-height: 42px;
+}
+
+.form-control:focus {
+  border-color: #1e6a70;
+  box-shadow: 0 0 0 4px rgba(30, 106, 112, 0.12);
+}
+
+table.tile_info td p {
+  color: #35543f;
+  font-weight: 600;
+}
+
+table td.chart #feature-chart,
+table td.chart #scenario-chart,
+table td.chart .total {
+  height: 160px;
+  width: 160px;
+}
+
+table td.chart .total {
+  top: 52px;
+  left: 50px;
+  color: #17393b;
+  font-size: 34px;
+  font-weight: 700;
+}
+
+.chart-header-flex span,
+table.chart tr th p {
+  color: #204346;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.passed-color {
+  color: #23754e !important;
+}
+
+.failed-color,
+.ambiguous-color {
+  color: #b13b37 !important;
+}
+
+.skipped-color {
+  color: #2870a8 !important;
+}
+
+.pending-color,
+.not-defined-color {
+  color: #ba7d10 !important;
+}
+
+.passed-background {
+  background: #23754e !important;
+}
+
+.failed-background,
+.ambiguous-background {
+  background: #b13b37 !important;
+}
+
+.skipped-background {
+  background: #2870a8 !important;
+}
+
+.pending-background,
+.not-defined-background {
+  background: #ba7d10 !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  border-radius: 999px !important;
+  border: 0 !important;
+  margin: 0 4px;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current,
+.dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: #155f65 !important;
+  color: #fff !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: rgba(21, 95, 101, 0.12) !important;
+  color: #155f65 !important;
+}
+
+.created-by,
+.created-by a,
+.created-by i {
+  color: #5f6b62 !important;
+}
+
+.step {
+  border-radius: 18px;
+}
+
+.scenario {
+  border-radius: 18px;
+  border: 1px solid rgba(211, 205, 193, 0.88);
+  box-shadow: 0 14px 28px rgba(37, 44, 39, 0.06);
+}
+
+pre {
+  border-radius: 14px;
+  border: 1px solid rgba(214, 208, 195, 0.95);
+  background: #f7f5ef;
+}
+
+@media (max-width: 768px) {
+  .main_container {
+    padding: 18px 14px 8px;
+  }
+
+  nav .navbar-text {
+    font-size: 18px;
+  }
+
+  .x_title h2 {
+    font-size: 22px;
+  }
+}

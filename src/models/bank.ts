@@ -36,6 +36,16 @@ export interface LoanRequestData {
   downPayment: number;
 }
 
+export type TestDataProfile = "retail" | "premium" | "student";
+
+export interface ScenarioDataContext {
+  profile: TestDataProfile;
+  runId: string;
+  workerId: string;
+  scenarioKey: string;
+  uniqueId: string;
+}
+
 export interface AccountSummary {
   accountNumber: string;
   balance: number;

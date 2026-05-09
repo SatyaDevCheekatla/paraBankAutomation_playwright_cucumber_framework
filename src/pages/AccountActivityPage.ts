@@ -1,6 +1,4 @@
 import { expect, type Page } from "@playwright/test";
-import { ContentType } from "allure-js-commons";
-import * as allure from "allure-js-commons";
 
 import { reportStep } from "../utils/reporting";
 
@@ -18,13 +16,6 @@ export class AccountActivityPage {
   async assertTransactionsPresent(): Promise<void> {
     await reportStep("Verify that at least one transaction is displayed", async () => {
       await expect(this.page.locator("#transactionTable tbody tr").first()).toBeVisible();
-    });
-  }
-
-  async attachScreenshot(accountNumber: string): Promise<void> {
-    await reportStep(`Capture the transaction screenshot for account ${accountNumber}`, async () => {
-      const screenshot = await this.page.screenshot({ fullPage: true });
-      await allure.attachment(`Transactions - ${accountNumber}`, screenshot, ContentType.PNG);
     });
   }
 }

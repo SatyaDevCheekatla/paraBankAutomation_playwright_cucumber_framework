@@ -1,13 +1,19 @@
 import { type IWorldOptions, World, setWorldConstructor } from "@cucumber/cucumber";
 import type { BrowserContext, Page } from "@playwright/test";
 
-import type { CustomerJourneyState } from "../../src/models/bank";
+import type {
+  CustomerJourneyState,
+  ScenarioDataContext,
+  TestDataProfile
+} from "../../src/models/bank";
 
 export class CustomWorld extends World {
   context?: BrowserContext;
   page?: Page;
   scenarioName?: string;
   tracePath?: string;
+  dataProfile?: TestDataProfile;
+  testDataContext?: ScenarioDataContext;
   journey: CustomerJourneyState;
 
   constructor(options: IWorldOptions) {

@@ -1,5 +1,3 @@
-import "allure-cucumberjs";
-
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -12,11 +10,14 @@ import {
   Status,
   setDefaultTimeout
 } from "@cucumber/cucumber";
-import { ContentType } from "allure-js-commons";
-import * as allure from "allure-js-commons";
 
 import { frameworkConfig } from "../../src/config/env";
 import { browserManager } from "../../src/core/browserManager";
+import {
+  attachText,
+  attachImage,
+  setScenarioReportingContext
+} from "../../src/utils/reporting";
 import { CustomWorld } from "./world";
 
 setDefaultTimeout(Math.max(frameworkConfig.timeout, 180_000));
@@ -42,11 +43,6 @@ Before(async function (this: CustomWorld, { pickle }: ITestCaseHookParameter) {
     `${Date.now()}-${sanitizeFileName(pickle.name)}.zip`
   );
 
-  await allure.parentSuite("ParaBank");
-  await allure.suite("Cucumber BDD");
-  await allure.displayName(pickle.name);
-  await allure.parameter("browser", frameworkConfig.browser);
-
   this.context = await browser.newContext({
     baseURL: frameworkConfig.baseUrl,
     ignoreHTTPSErrors: true,
@@ -59,6 +55,11 @@ Before(async function (this: CustomWorld, { pickle }: ITestCaseHookParameter) {
   });
 
   this.page = await this.context.newPage();
+  setScenarioReportingContext({
+    attach: this.attach,
+    log: this.log,
+    link: this.link
+  });
 });
 
 After(async function (this: CustomWorld, { result }: ITestCaseHookParameter) {
@@ -67,22 +68,20 @@ After(async function (this: CustomWorld, { result }: ITestCaseHookParameter) {
   try {
     if (scenarioFailed && this.page) {
       const screenshot = await this.page.screenshot({ fullPage: true });
-      await allure.attachment("Failure screenshot", screenshot, ContentType.PNG);
+      await attachImage("Failure screenshot", screenshot);
     }
 
     if (this.context) {
       if (scenarioFailed && this.tracePath) {
         await mkdir(path.dirname(this.tracePath), { recursive: true });
         await this.context.tracing.stop({ path: this.tracePath });
-        await allure.attachmentPath("Playwright trace", this.tracePath, {
-          contentType: "application/zip",
-          fileExtension: "zip"
-        });
+        await attachText("Playwright trace", `Trace saved to: ${this.tracePath}`);
       } else {
         await this.context.tracing.stop();
       }
     }
   } finally {
+    setScenarioReportingContext(undefined);
     await this.context?.close();
     this.page = undefined;
     this.context = undefined;

@@ -4,18 +4,30 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   test:
-    name: Playwright Cucumber Allure
+    name: Test on ${{ matrix.browser }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chromium
+          - firefox
+          - webkit
 
     env:
       CI: true
       HEADLESS: true
-      BROWSER: chromium
+      BROWSER: ${{ matrix.browser }}
+      PARALLEL: 3
       BASE_URL: https://parabank.parasoft.com/parabank/
       PARABANK_USERNAME: john
       PARABANK_PASSWORD: demo
@@ -29,74 +41,58 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: npm
-
-      - name: Setup Java for Allure
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Type check
+        if: matrix.browser == 'chromium'
         run: npm run typecheck
 
       - name: Run Cucumber suite
-        run: npm test || true
+        id: cucumber_run
+        run: npm test
+        continue-on-error: true
 
-      - name: Generate Allure report
+      - name: Generate Cucumber HTML report
         if: always()
         run: npm run report:generate
 
-      # 🔍 DEBUG: verify report generated
-      - name: Verify Allure Report
-        run: |
-          echo "Listing allure-report contents:"
-          ls -R allure-report || echo "No allure-report found"
-
-      - name: Upload Allure HTML report
+      - name: Upload browser JSON results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-report
-          path: allure-report/
+          name: cucumber-json-${{ matrix.browser }}
+          path: reports/cucumber-json/
           if-no-files-found: warn
 
-      - name: Send Email with Report Link
+      - name: Upload browser HTML report
         if: always()
-        uses: dawidd6/action-send-mail@v3
+        uses: actions/upload-artifact@v4
         with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "ParaBank Automation Test Report - ${{ job.status }}"
-          to: cheekatlasatyadev@gmail.com
-          from: ${{ secrets.EMAIL_USERNAME }}
-          body: |
-            Test Execution Report
-            ====================
+          name: cucumber-report-${{ matrix.browser }}
+          path: reports/cucumber-html/
+          if-no-files-found: warn
 
-            Status: ${{ job.status }}
+      - name: Upload Playwright traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.browser }}
+          path: test-results/traces/
+          if-no-files-found: warn
 
-            🌐 View Allure Report:
-            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+      - name: Fail job when tests fail
+        if: steps.cucumber_run.outcome == 'failure'
+        run: exit 1
 
-            🔗 Workflow Run:
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-            Regards,
-            GitHub Actions
-
-  deploy:
-    name: Deploy Allure Report to GitHub Pages
+  publish-report:
+    name: Publish combined Cucumber report
     needs: test
     runs-on: ubuntu-latest
     if: always()
@@ -107,30 +103,35 @@ jobs:
       contents: read
 
     steps:
-      - name: Download Allure Report Artifact
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all JSON artifacts
         uses: actions/download-artifact@v4
         with:
-          name: allure-report
-          path: artifact
+          pattern: cucumber-json-*
+          path: artifacts/json
 
-      # 🔍 DEBUG: check downloaded files
-      - name: Verify Artifact Content
+      - name: Generate combined customer-facing report
         run: |
-          echo "Artifact content:"
-          ls -R artifact || echo "Artifact empty"
-
-      # ✅ Prepare correct Pages structure
-      - name: Prepare Pages Content
-        run: |
-          mkdir public
-          cp -r artifact/* public/ || echo "Copy failed"
+          node ./scripts/generate-cucumber-report.mjs --jsonDir artifacts/json --reportDir public --runId github-${{ github.run_id }}
           touch public/.nojekyll
 
-      # 🔍 DEBUG: confirm final structure
-      - name: Verify Public Folder
-        run: |
-          echo "Public folder content:"
-          ls -R public
+      - name: Upload combined HTML report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-report-combined
+          path: public/
+          if-no-files-found: error
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -141,4 +142,32 @@ jobs:
           path: public
 
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Email report links
+        if: always() && secrets.EMAIL_USERNAME != '' && secrets.EMAIL_PASSWORD != '' && vars.REPORT_RECIPIENTS != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "ParaBank Automation Test Report - ${{ needs.test.result }}"
+          to: ${{ vars.REPORT_RECIPIENTS }}
+          from: ${{ secrets.EMAIL_USERNAME }}
+          body: |
+            Test Execution Report
+            ====================
+
+            Matrix Result: ${{ needs.test.result }}
+
+            View Cucumber Report:
+            ${{ steps.deployment.outputs.page_url }}
+
+            Workflow Run:
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Regards,
+            GitHub Actions

@@ -1,7 +1,7 @@
+import { Given, Then, When } from "@cucumber/cucumber";
 import { expect } from "@playwright/test";
-import * as allure from "allure-js-commons";
 
-import type { AccountSummary } from "../../src/models/bank";
+import type { AccountSummary, TestDataProfile } from "../../src/models/bank";
 import { AccountActivityPage } from "../../src/pages/AccountActivityPage";
 import { AccountsOverviewPage } from "../../src/pages/AccountsOverviewPage";
 import { AccountServicesPage } from "../../src/pages/AccountServicesPage";
@@ -17,234 +17,224 @@ import {
   createLoanRequestData,
   createPayeeData,
   createRegistrationData,
-  createUpdatedContactInfo
+  createScenarioDataContext,
+  createTransferAmount,
+  createUpdatedContactInfo,
+  defaultTestDataProfile
 } from "../../src/utils/testDataFactory";
-import { Given, Then, When } from "@cucumber/cucumber";
 import { CustomWorld } from "../support/world";
 
 const sortAccountsByBalanceDescending = (accounts: AccountSummary[]): AccountSummary[] =>
   [...accounts].sort((left, right) => right.balance - left.balance);
 
-Given("a customer registers and opens a new savings account", async function (this: CustomWorld) {
-  const page = this.getPage();
+const parseProfile = (value?: string): TestDataProfile => {
+  const normalizedValue = (value ?? defaultTestDataProfile).trim().toLowerCase();
+
+  if (
+    normalizedValue !== "retail" &&
+    normalizedValue !== "premium" &&
+    normalizedValue !== "student"
+  ) {
+    throw new Error(`Unsupported data profile "${value}". Use retail, premium, or student.`);
+  }
+
+  return normalizedValue;
+};
+
+const getOrCreateDataContext = (
+  world: CustomWorld,
+  requestedProfile?: string
+) => {
+  const profile = parseProfile(requestedProfile ?? world.dataProfile ?? defaultTestDataProfile);
+
+  world.dataProfile = profile;
+
+  if (!world.testDataContext || world.testDataContext.profile !== profile) {
+    world.testDataContext = createScenarioDataContext(world.scenarioName ?? "parabank-scenario", profile);
+  }
+
+  return world.testDataContext;
+};
+
+const getAccountServicesPage = (world: CustomWorld): AccountServicesPage =>
+  new AccountServicesPage(world.getPage());
+
+const getAccountsOverviewPage = (world: CustomWorld): AccountsOverviewPage =>
+  new AccountsOverviewPage(world.getPage());
+
+const registerAndStayLoggedIn = async (
+  world: CustomWorld,
+  requestedProfile?: string
+): Promise<void> => {
+  const page = world.getPage();
   const loginPage = new LoginPage(page);
   const registrationPage = new RegistrationPage(page);
   const accountServicesPage = new AccountServicesPage(page);
-  const accountsOverviewPage = new AccountsOverviewPage(page);
-  const openNewAccountPage = new OpenNewAccountPage(page);
+  const dataContext = getOrCreateDataContext(world, requestedProfile);
+  const registrationData = createRegistrationData(dataContext);
 
-  const registrationData = createRegistrationData();
-  this.journey.registrationData = registrationData;
+  world.journey.registrationData = registrationData;
 
-  await allure.step("Create a brand-new ParaBank customer and capture the generated credentials", async (stepContext) => {
-    await stepContext.parameter("username", registrationData.username);
-    await stepContext.parameter("password", "masked", "masked");
+  await loginPage.open();
+  await loginPage.assertLoaded();
+  await loginPage.openRegistrationPage();
+  await registrationPage.assertLoaded();
+  await registrationPage.registerCustomer(registrationData);
+  await registrationPage.assertRegistrationSucceeded(registrationData.username);
+  await accountServicesPage.assertWelcomeMessage(registrationData.username);
+};
 
-    await loginPage.open();
-    await loginPage.assertLoaded();
-    await loginPage.openRegistrationPage();
-    await registrationPage.assertLoaded();
-    await registrationPage.registerCustomer(registrationData);
-    await registrationPage.assertRegistrationSucceeded(registrationData.username);
-    await accountServicesPage.assertWelcomeMessage(registrationData.username);
-  });
+const openAdditionalSavingsAccount = async (world: CustomWorld): Promise<void> => {
+  const accountServicesPage = getAccountServicesPage(world);
+  const accountsOverviewPage = getAccountsOverviewPage(world);
+  const openNewAccountPage = new OpenNewAccountPage(world.getPage());
 
   await accountServicesPage.openAccountsOverview();
   await accountsOverviewPage.assertLoaded();
 
-  const initialAccounts = await accountsOverviewPage.getAccounts();
-  expect(initialAccounts.length).toBeGreaterThan(0);
+  const accounts = await accountsOverviewPage.getAccounts();
+  expect(accounts.length).toBeGreaterThan(0);
 
-  this.journey.primaryAccountNumber = initialAccounts[0].accountNumber;
-  this.journey.accountNumbers = [initialAccounts[0].accountNumber];
+  world.journey.primaryAccountNumber = accounts[0].accountNumber;
+  world.journey.accountNumbers = accounts.map((account) => account.accountNumber);
 
   await accountServicesPage.openNewAccount();
   await openNewAccountPage.assertLoaded();
 
-  const savingsAccountNumber = await openNewAccountPage.openSavingsAccount(
-    initialAccounts[0].accountNumber
-  );
-
+  const savingsAccountNumber = await openNewAccountPage.openSavingsAccount(accounts[0].accountNumber);
   expect(savingsAccountNumber).toMatch(/^\d+$/);
 
-  this.journey.savingsAccountNumber = savingsAccountNumber;
-  this.journey.accountNumbers.push(savingsAccountNumber);
+  world.journey.savingsAccountNumber = savingsAccountNumber;
+  world.journey.accountNumbers = [...new Set([...world.journey.accountNumbers, savingsAccountNumber])];
+};
 
-  await accountServicesPage.logout();
-});
-
-When("the customer logs in again with the newly created credentials", async function (this: CustomWorld) {
-  const registrationData = this.journey.registrationData;
-  expect(registrationData).toBeDefined();
-
-  const loginPage = new LoginPage(this.getPage());
-
-  await allure.step("Log in again with the newly registered credentials", async (stepContext) => {
-    await stepContext.parameter("username", registrationData!.username);
-    await stepContext.parameter("password", "masked", "masked");
-
-    await loginPage.assertLoaded();
-    await loginPage.login(registrationData!.username, registrationData!.password);
-  });
-});
-
-Then(
-  "the accounts overview should contain the accounts created during registration",
-  async function (this: CustomWorld) {
-    const accountServicesPage = new AccountServicesPage(this.getPage());
-    const accountsOverviewPage = new AccountsOverviewPage(this.getPage());
-
-    await accountServicesPage.openAccountsOverview();
-    await accountsOverviewPage.assertLoaded();
-
-    await accountsOverviewPage.assertContainsAccount(this.journey.primaryAccountNumber!);
-    await accountsOverviewPage.assertContainsAccount(this.journey.savingsAccountNumber!);
-
-    const accounts = await accountsOverviewPage.getAccounts();
-    this.journey.accountNumbers = accounts.map((account) => account.accountNumber);
-  }
-);
-
-When("the customer ensures at least two accounts are available", async function (this: CustomWorld) {
-  const accountServicesPage = new AccountServicesPage(this.getPage());
-  const accountsOverviewPage = new AccountsOverviewPage(this.getPage());
-  const openNewAccountPage = new OpenNewAccountPage(this.getPage());
+const ensureAtLeastTwoAccounts = async (world: CustomWorld): Promise<void> => {
+  const accountServicesPage = getAccountServicesPage(world);
+  const accountsOverviewPage = getAccountsOverviewPage(world);
 
   await accountServicesPage.openAccountsOverview();
   await accountsOverviewPage.assertLoaded();
 
   let accounts = await accountsOverviewPage.getAccounts();
 
-  await allure.step("Ensure that at least two accounts are available for transactions", async () => {
-    if (accounts.length > 1) {
-      return;
-    }
-
-    await accountServicesPage.openNewAccount();
-    await openNewAccountPage.assertLoaded();
-
-    const newAccountNumber = await openNewAccountPage.openSavingsAccount(accounts[0].accountNumber);
-
-    expect(newAccountNumber).toMatch(/^\d+$/);
-
-    if (!this.journey.savingsAccountNumber) {
-      this.journey.savingsAccountNumber = newAccountNumber;
-    }
-  });
-
-  await accountServicesPage.openAccountsOverview();
-  await accountsOverviewPage.assertLoaded();
-  accounts = await accountsOverviewPage.getAccounts();
+  if (accounts.length < 2) {
+    await openAdditionalSavingsAccount(world);
+    await accountServicesPage.openAccountsOverview();
+    await accountsOverviewPage.assertLoaded();
+    accounts = await accountsOverviewPage.getAccounts();
+  }
 
   expect(accounts.length).toBeGreaterThan(1);
-  this.journey.accountNumbers = accounts.map((account) => account.accountNumber);
-});
+  world.journey.accountNumbers = accounts.map((account) => account.accountNumber);
+};
 
-When("the customer transfers {int} dollars between two accounts", async function (this: CustomWorld, amount: number) {
-  const accountServicesPage = new AccountServicesPage(this.getPage());
-  const accountsOverviewPage = new AccountsOverviewPage(this.getPage());
-  const transferFundsPage = new TransferFundsPage(this.getPage());
+const transferGeneratedAmount = async (
+  world: CustomWorld,
+  requestedProfile?: string
+): Promise<void> => {
+  const dataContext = getOrCreateDataContext(world, requestedProfile);
+  const accountServicesPage = getAccountServicesPage(world);
+  const accountsOverviewPage = getAccountsOverviewPage(world);
+  const transferFundsPage = new TransferFundsPage(world.getPage());
 
   await accountServicesPage.openAccountsOverview();
   await accountsOverviewPage.assertLoaded();
 
   const accounts = sortAccountsByBalanceDescending(await accountsOverviewPage.getAccounts());
   expect(accounts.length).toBeGreaterThan(1);
-  expect(accounts[0].balance).toBeGreaterThan(amount);
 
-  const sourceAccount = accounts[0];
+  const transferAmount = createTransferAmount(dataContext.profile);
+  const sourceAccount = accounts.find((account) => account.balance > transferAmount);
+  expect(sourceAccount).toBeDefined();
+
   const targetAccount = accounts.find(
-    (account) => account.accountNumber !== sourceAccount.accountNumber
+    (account) => account.accountNumber !== sourceAccount!.accountNumber
   );
 
   expect(targetAccount).toBeDefined();
 
-  this.journey.transferAmount = amount;
-  this.journey.primaryAccountNumber = sourceAccount.accountNumber;
-  this.journey.savingsAccountNumber = targetAccount!.accountNumber;
+  world.journey.transferAmount = transferAmount;
+  world.journey.primaryAccountNumber = sourceAccount!.accountNumber;
+  world.journey.savingsAccountNumber = targetAccount!.accountNumber;
 
   await accountServicesPage.openTransferFunds();
   await transferFundsPage.assertLoaded();
-  await transferFundsPage.transferFunds(amount, sourceAccount.accountNumber, targetAccount!.accountNumber);
-});
+  await transferFundsPage.transferFunds(
+    transferAmount,
+    sourceAccount!.accountNumber,
+    targetAccount!.accountNumber
+  );
+};
 
-When("the customer pays a bill from one of the available accounts", async function (this: CustomWorld) {
-  const accountServicesPage = new AccountServicesPage(this.getPage());
-  const accountsOverviewPage = new AccountsOverviewPage(this.getPage());
-  const billPayPage = new BillPayPage(this.getPage());
+const payBillWithGeneratedData = async (
+  world: CustomWorld,
+  requestedProfile?: string
+): Promise<void> => {
+  const dataContext = getOrCreateDataContext(world, requestedProfile);
+  const accountServicesPage = getAccountServicesPage(world);
+  const accountsOverviewPage = getAccountsOverviewPage(world);
+  const billPayPage = new BillPayPage(world.getPage());
 
   await accountServicesPage.openAccountsOverview();
   await accountsOverviewPage.assertLoaded();
 
   const accounts = sortAccountsByBalanceDescending(await accountsOverviewPage.getAccounts());
   const fundingAccount = accounts[0];
+  const billAmount = createBillAmount(dataContext.profile);
 
-  expect(fundingAccount.balance).toBeGreaterThan(100);
+  expect(fundingAccount.balance).toBeGreaterThan(billAmount);
 
-  const payee = createPayeeData();
-  const billAmount = createBillAmount();
+  const payee = createPayeeData(dataContext);
 
-  this.journey.billPayee = payee;
-  this.journey.billAmount = billAmount;
-  this.journey.primaryAccountNumber = fundingAccount.accountNumber;
-
-  await allure.step("Generate random payee details for the bill payment", async (stepContext) => {
-    await stepContext.parameter("payee", payee.name);
-    await stepContext.parameter("billAmount", billAmount.toString());
-  });
+  world.journey.billPayee = payee;
+  world.journey.billAmount = billAmount;
+  world.journey.primaryAccountNumber = fundingAccount.accountNumber;
 
   await accountServicesPage.openBillPay();
   await billPayPage.assertLoaded();
   await billPayPage.makePayment(payee, billAmount, fundingAccount.accountNumber);
-});
+};
 
-Then(
-  "the customer reviews the transactions for all available accounts and attaches screenshots to the report",
-  async function (this: CustomWorld) {
-    const accountServicesPage = new AccountServicesPage(this.getPage());
-    const accountsOverviewPage = new AccountsOverviewPage(this.getPage());
-    const accountActivityPage = new AccountActivityPage(this.getPage());
+const reviewTransactionsForAllAccounts = async (world: CustomWorld): Promise<void> => {
+  const accountServicesPage = getAccountServicesPage(world);
+  const accountsOverviewPage = getAccountsOverviewPage(world);
+  const accountActivityPage = new AccountActivityPage(world.getPage());
 
+  await accountServicesPage.openAccountsOverview();
+  await accountsOverviewPage.assertLoaded();
+
+  const accounts = await accountsOverviewPage.getAccounts();
+  expect(accounts.length).toBeGreaterThan(0);
+
+  world.journey.accountNumbers = accounts.map((account) => account.accountNumber);
+
+  for (const account of accounts) {
+    await accountsOverviewPage.openAccountActivity(account.accountNumber);
+    await accountActivityPage.assertLoaded(account.accountNumber);
+    await accountActivityPage.assertTransactionsPresent();
     await accountServicesPage.openAccountsOverview();
     await accountsOverviewPage.assertLoaded();
-
-    const accounts = await accountsOverviewPage.getAccounts();
-    expect(accounts.length).toBeGreaterThan(1);
-
-    this.journey.accountNumbers = accounts.map((account) => account.accountNumber);
-
-    for (const account of accounts) {
-      await accountsOverviewPage.openAccountActivity(account.accountNumber);
-      await accountActivityPage.assertLoaded(account.accountNumber);
-      await accountActivityPage.assertTransactionsPresent();
-      await accountActivityPage.attachScreenshot(account.accountNumber);
-      await accountServicesPage.openAccountsOverview();
-      await accountsOverviewPage.assertLoaded();
-    }
   }
-);
+};
 
-When("the customer updates the contact information with random data", async function (this: CustomWorld) {
-  const accountServicesPage = new AccountServicesPage(this.getPage());
-  const updateContactInfoPage = new UpdateContactInfoPage(this.getPage());
+const updateContactInfoWithGeneratedData = async (world: CustomWorld): Promise<void> => {
+  const dataContext = getOrCreateDataContext(world);
+  const accountServicesPage = getAccountServicesPage(world);
+  const updateContactInfoPage = new UpdateContactInfoPage(world.getPage());
+  const updatedContactInfo = createUpdatedContactInfo(dataContext);
 
-  const updatedContactInfo = createUpdatedContactInfo();
-  this.journey.updatedContactInfo = updatedContactInfo;
-
-  await allure.step("Generate random customer contact details for the profile update", async (stepContext) => {
-    await stepContext.parameter("updatedCity", updatedContactInfo.city);
-    await stepContext.parameter("updatedState", updatedContactInfo.state);
-  });
+  world.journey.updatedContactInfo = updatedContactInfo;
 
   await accountServicesPage.openUpdateContactInfo();
   await updateContactInfoPage.assertLoaded();
   await updateContactInfoPage.updateContactInfo(updatedContactInfo);
-});
+};
 
-Then("the customer applies for a loan and receives a successful approval", async function (this: CustomWorld) {
-  const accountServicesPage = new AccountServicesPage(this.getPage());
-  const accountsOverviewPage = new AccountsOverviewPage(this.getPage());
-  const requestLoanPage = new RequestLoanPage(this.getPage());
+const applyForGeneratedLoan = async (world: CustomWorld): Promise<void> => {
+  const dataContext = getOrCreateDataContext(world);
+  const accountServicesPage = getAccountServicesPage(world);
+  const accountsOverviewPage = getAccountsOverviewPage(world);
+  const requestLoanPage = new RequestLoanPage(world.getPage());
 
   await accountServicesPage.openAccountsOverview();
   await accountsOverviewPage.assertLoaded();
@@ -254,13 +244,8 @@ Then("the customer applies for a loan and receives a successful approval", async
 
   expect(fundingAccount.balance).toBeGreaterThan(75);
 
-  const loanRequest = createLoanRequestData(fundingAccount.balance);
-  this.journey.loanRequest = loanRequest;
-
-  await allure.step("Generate loan request values that fit the available account balance", async (stepContext) => {
-    await stepContext.parameter("loanAmount", loanRequest.amount.toString());
-    await stepContext.parameter("downPayment", loanRequest.downPayment.toString());
-  });
+  const loanRequest = createLoanRequestData(fundingAccount.balance, dataContext.profile);
+  world.journey.loanRequest = loanRequest;
 
   await accountServicesPage.openRequestLoan();
   await requestLoanPage.assertLoaded();
@@ -272,5 +257,96 @@ Then("the customer applies for a loan and receives a successful approval", async
   );
 
   expect(loanAccountNumber).toMatch(/^\d+$/);
-  this.journey.loanAccountNumber = loanAccountNumber;
+  world.journey.loanAccountNumber = loanAccountNumber;
+};
+
+Given("a newly registered customer is logged in to ParaBank", async function (this: CustomWorld) {
+  await registerAndStayLoggedIn(this);
 });
+
+Given(
+  "a newly registered customer is logged in to ParaBank using the {string} data profile",
+  async function (this: CustomWorld, profile: string) {
+    await registerAndStayLoggedIn(this, profile);
+  }
+);
+
+When("the customer opens an additional savings account", async function (this: CustomWorld) {
+  await openAdditionalSavingsAccount(this);
+});
+
+When("the customer logs out", async function (this: CustomWorld) {
+  await getAccountServicesPage(this).logout();
+});
+
+When("the customer logs back in with the generated credentials", async function (this: CustomWorld) {
+  const registrationData = this.journey.registrationData;
+  expect(registrationData).toBeDefined();
+
+  const loginPage = new LoginPage(this.getPage());
+
+  await loginPage.assertLoaded();
+  await loginPage.login(registrationData!.username, registrationData!.password);
+});
+
+Then(
+  "the accounts overview should contain the accounts created for the customer",
+  async function (this: CustomWorld) {
+    const accountServicesPage = getAccountServicesPage(this);
+    const accountsOverviewPage = getAccountsOverviewPage(this);
+
+    await accountServicesPage.openAccountsOverview();
+    await accountsOverviewPage.assertLoaded();
+
+    const accounts = await accountsOverviewPage.getAccounts();
+    expect(accounts.length).toBeGreaterThan(0);
+
+    this.journey.accountNumbers = accounts.map((account) => account.accountNumber);
+
+    await accountsOverviewPage.assertContainsAccount(this.journey.accountNumbers[0]);
+
+    if (this.journey.savingsAccountNumber) {
+      await accountsOverviewPage.assertContainsAccount(this.journey.savingsAccountNumber);
+    }
+  }
+);
+
+When("the customer ensures at least two accounts are available", async function (this: CustomWorld) {
+  await ensureAtLeastTwoAccounts(this);
+});
+
+When(
+  "the customer transfers a generated amount using the {string} data profile",
+  async function (this: CustomWorld, profile: string) {
+    await ensureAtLeastTwoAccounts(this);
+    await transferGeneratedAmount(this, profile);
+  }
+);
+
+When(
+  "the customer pays a bill using the {string} data profile",
+  async function (this: CustomWorld, profile: string) {
+    await payBillWithGeneratedData(this, profile);
+  }
+);
+
+Then(
+  "the customer reviews the transactions for all available accounts",
+  async function (this: CustomWorld) {
+    await reviewTransactionsForAllAccounts(this);
+  }
+);
+
+When(
+  "the customer updates the contact information with generated data",
+  async function (this: CustomWorld) {
+    await updateContactInfoWithGeneratedData(this);
+  }
+);
+
+Then(
+  "the customer applies for a generated loan and receives a successful approval",
+  async function (this: CustomWorld) {
+    await applyForGeneratedLoan(this);
+  }
+);

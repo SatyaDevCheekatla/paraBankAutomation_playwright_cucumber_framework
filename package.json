@@ -1,26 +1,27 @@
 {
   "name": "parabank-playwright-framework",
   "version": "1.0.0",
-  "description": "Playwright + TypeScript + Cucumber BDD + Allure automation framework for ParaBank",
+  "description": "Playwright + TypeScript + Cucumber BDD automation framework for ParaBank with styled Cucumber dashboard reporting",
   "private": true,
   "scripts": {
     "test": "node ./scripts/run-cucumber.mjs",
     "test:smoke": "node ./scripts/run-cucumber.mjs --tags @smoke",
     "test:headed": "node ./scripts/run-cucumber.mjs --headed",
     "test:firefox": "node ./scripts/run-cucumber.mjs --browser firefox",
+    "test:parallel": "node ./scripts/run-cucumber.mjs --parallel 3",
     "test:debug": "node ./scripts/run-cucumber.mjs --headed --slowmo 300",
     "typecheck": "tsc --noEmit",
     "pw:install": "npx playwright install chromium",
     "pw:install:all": "npx playwright install",
-    "report:generate": "node ./scripts/generate-allure.mjs",
-    "report:open": "node ./scripts/open-allure.mjs"
+    "report:generate": "node ./scripts/generate-cucumber-report.mjs",
+    "report:open": "node ./scripts/generate-cucumber-report.mjs --open"
   },
   "keywords": [
     "playwright",
     "typescript",
     "cucumber",
     "bdd",
-    "allure"
+    "reporting"
   ],
   "author": "",
   "license": "ISC",
@@ -29,10 +30,8 @@
     "@cucumber/messages": "^32.3.1",
     "@playwright/test": "^1.59.1",
     "@types/node": "^25.6.0",
-    "allure-commandline": "^2.38.1",
-    "allure-cucumberjs": "^3.7.1",
-    "allure-js-commons": "^3.7.1",
     "dotenv": "^17.4.2",
+    "multiple-cucumber-html-reporter": "^3.10.0",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
