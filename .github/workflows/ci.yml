@@ -1,12 +1,18 @@
 name: ParaBank UI CI
 
+concurrency:
+  group: parabank-ui-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
       - main
+
   pull_request:
     branches:
       - main
+
   workflow_dispatch:
 
 jobs:
@@ -17,6 +23,7 @@ jobs:
 
     strategy:
       fail-fast: false
+
       matrix:
         browser:
           - chromium
@@ -28,9 +35,12 @@ jobs:
       HEADLESS: true
       BROWSER: ${{ matrix.browser }}
       PARALLEL: 3
+
       BASE_URL: https://parabank.parasoft.com/parabank/
+
       PARABANK_USERNAME: john
       PARABANK_PASSWORD: demo
+
       TIMEOUT: 30000
       SLOW_MO: 0
 
@@ -47,8 +57,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browser
+      - name: Install Playwright browsers
         run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Verify Playwright installation
+        run: npx playwright --version
 
       - name: Type check
         if: matrix.browser == 'chromium'
@@ -70,6 +83,7 @@ jobs:
           name: cucumber-json-${{ matrix.browser }}
           path: reports/cucumber-json/
           if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload browser HTML report
         if: always()
@@ -78,6 +92,7 @@ jobs:
           name: cucumber-report-${{ matrix.browser }}
           path: reports/cucumber-html/
           if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload Playwright traces
         if: always()
@@ -86,21 +101,36 @@ jobs:
           name: playwright-traces-${{ matrix.browser }}
           path: test-results/traces/
           if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots-${{ matrix.browser }}
+          path: test-results/screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Fail job when tests fail
-        if: steps.cucumber_run.outcome == 'failure'
+        if: failure() || steps.cucumber_run.outcome == 'failure'
         run: exit 1
 
   publish-report:
     name: Publish combined Cucumber report
     needs: test
     runs-on: ubuntu-latest
+
     if: always()
 
     permissions:
       pages: write
       id-token: write
       contents: read
+
+    env:
+      EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
 
     steps:
       - name: Checkout repository
@@ -120,10 +150,15 @@ jobs:
         with:
           pattern: cucumber-json-*
           path: artifacts/json
+          merge-multiple: true
 
       - name: Generate combined customer-facing report
         run: |
-          node ./scripts/generate-cucumber-report.mjs --jsonDir artifacts/json --reportDir public --runId github-${{ github.run_id }}
+          node ./scripts/generate-cucumber-report.mjs \
+            --jsonDir artifacts/json \
+            --reportDir public \
+            --runId github-${{ github.run_id }}
+
           touch public/.nojekyll
 
       - name: Upload combined HTML report artifact
@@ -132,11 +167,12 @@ jobs:
           name: cucumber-report-combined
           path: public/
           if-no-files-found: error
+          retention-days: 14
 
-      - name: Setup Pages
+      - name: Setup GitHub Pages
         uses: actions/configure-pages@v4
 
-      - name: Upload Pages Artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
@@ -145,29 +181,50 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
+      - name: Print report URL
+        run: |
+          echo "Report URL:"
+          echo "${{ steps.deployment.outputs.page_url }}"
+
       - name: Email report links
-        if: always() && secrets.EMAIL_USERNAME != '' && secrets.EMAIL_PASSWORD != '' && vars.REPORT_RECIPIENTS != ''
+        if: always() && env.EMAIL_USERNAME != '' && env.EMAIL_PASSWORD != '' && vars.REPORT_RECIPIENTS != ''
         uses: dawidd6/action-send-mail@v3
+
         with:
           server_address: smtp.gmail.com
           server_port: 465
           secure: true
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
+
+          username: ${{ env.EMAIL_USERNAME }}
+          password: ${{ env.EMAIL_PASSWORD }}
+
           subject: "ParaBank Automation Test Report - ${{ needs.test.result }}"
+
           to: ${{ vars.REPORT_RECIPIENTS }}
-          from: ${{ secrets.EMAIL_USERNAME }}
+
+          from: ${{ env.EMAIL_USERNAME }}
+
           body: |
-            Test Execution Report
-            ====================
+            ParaBank Automation Execution Report
+            ====================================
 
-            Matrix Result: ${{ needs.test.result }}
+            Execution Status:
+            ${{ needs.test.result }}
 
-            View Cucumber Report:
+            Browser Matrix:
+            chromium, firefox, webkit
+
+            View HTML Report:
             ${{ steps.deployment.outputs.page_url }}
 
             Workflow Run:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
+            Repository:
+            ${{ github.repository }}
+
+            Branch:
+            ${{ github.ref_name }}
+
             Regards,
-            GitHub Actions
+            GitHub Actions CI Pipeline
